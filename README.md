@@ -1,6 +1,6 @@
 # go-jwtkit
 
-JWT for Go: access token (short-lived, for API auth) and refresh token (long-lived, for issuing new pairs). HS256, configurable issuer and TTLs, optional revocation store, key rotation via kid.
+JWT issuance, validation, and revocation for access/refresh token pairs.
 
 ## Install
 
@@ -8,8 +8,51 @@ JWT for Go: access token (short-lived, for API auth) and refresh token (long-liv
 go get github.com/TakuyaYagam1/go-jwtkit
 ```
 
-## Package
+```go
+import "github.com/TakuyaYagam1/go-jwtkit"
+```
 
-- **`jwt`** — Service interface and JWTService: two-token model (access + refresh). GenerateTokenPair issues both; ValidateAccessToken / ValidateRefreshToken; RefreshTokens validates refresh and returns new pair. RevokeRefreshToken, RevokeAccessToken, RevokeAllForUser. NewJWTService(accessKeys, refreshKeys, accessTTL, refreshTTL, issuer, revoker, userRoleLookup); revoker and userRoleLookup may be nil. KeyEntry (Kid, Secret); secrets at least MinSecretLength (32) bytes. RevocationStore; RedisRevocationStore(client). SetUserRoleLookup for fresh email/name/role on refresh. CustomClaims, TokenPair.
+## Features
 
-Requires **github.com/golang-jwt/jwt/v5**, **github.com/google/uuid**; **github.com/redis/go-redis/v9** optional for RedisRevocationStore.
+- **HS256** (symmetric): NewJWTService with KeyEntry secrets; key rotation via kid
+- **RS256 / EdDSA** (asymmetric): NewJWTServiceAsymmetric with AsymmetricKeyEntry key pairs
+- Access and refresh tokens with configurable TTLs and issuer
+- **RevocationStore**: blacklist JTIs and user-level revocation (e.g. RedisRevocationStore)
+- **UserRoleLookup**: refresh email/name/role when issuing new tokens from refresh token
+- **HTTP**: JWTAuth middleware; ExtractRaw, ExtractRawFromCookie; ClaimsFromContext, UserIDFromContext, RoleFromContext
+
+## Example
+
+```go
+svc, err := jwt.NewJWTService(
+    []jwt.KeyEntry{{Kid: "0", Secret: accessSecret}},
+    []jwt.KeyEntry{{Kid: "0", Secret: refreshSecret}},
+    time.Hour, 24*time.Hour, "my-app", redisRevoker, userRoleLookup,
+)
+pair, _ := svc.GenerateTokenPair(ctx, userID, email, name, role)
+
+mux := http.NewServeMux()
+mux.Handle("/api/", jwt.JWTAuth(svc, apiHandler))
+```
+
+In handlers after JWTAuth:
+
+```go
+userID, ok := jwt.UserIDFromContext(r.Context())
+claims, ok := jwt.ClaimsFromContext(r.Context())
+```
+
+## API
+
+| Symbol | Description |
+|--------|-------------|
+| Service | Interface: GenerateTokenPair, ValidateAccessToken, ValidateRefreshToken, RefreshTokens, Revoke*, RevokeAllForUser |
+| JWTService | HS256 implementation; NewJWTService |
+| JWTServiceAsymmetric | RS256/EdDSA implementation; NewJWTServiceAsymmetric, AsymmetricKeyEntry |
+| CustomClaims | UserID, Email, FullName, Role, TokenType, RegisteredClaims |
+| TokenPair | AccessToken, RefreshToken, AccessExpiresAt, RefreshExpiresAt |
+| KeyEntry | Kid, Secret (symmetric) |
+| RevocationStore | Revoke, IsRevoked, RevokeUserTokens, IsUserRevoked; RedisRevocationStore |
+| JWTAuth(svc, next) | HTTP middleware: Bearer validation, claims in context; 401 on failure |
+| ExtractRaw(r), ExtractRawFromCookie(r, name) | Raw token from header or cookie |
+| ClaimsIntoContext, ClaimsFromContext, UserIDFromContext, RoleFromContext | Context helpers |

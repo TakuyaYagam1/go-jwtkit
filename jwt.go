@@ -16,8 +16,7 @@ const MinSecretLength = 32
 const (
 	TokenTypeAccess  = "access"
 	TokenTypeRefresh = "refresh"
-	AccessMethod     = "HS256"
-	RefreshMethod    = "HS256"
+	SigningMethod    = "HS256"
 )
 
 // UserRoleLookup returns current email, name, and role for a user; used when refreshing tokens.
@@ -165,7 +164,7 @@ func (j *JWTService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, em
 		},
 	}
 
-	accessToken := jwt.NewWithClaims(jwt.GetSigningMethod(AccessMethod), accessClaims)
+	accessToken := jwt.NewWithClaims(jwt.GetSigningMethod(SigningMethod), accessClaims)
 	accessToken.Header["kid"] = j.accessPrimaryKid
 	accessKey := j.accessKeysByKid[j.accessPrimaryKid]
 	accessTokenString, err := accessToken.SignedString(accessKey)
@@ -173,7 +172,7 @@ func (j *JWTService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, em
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken := jwt.NewWithClaims(jwt.GetSigningMethod(RefreshMethod), refreshClaims)
+	refreshToken := jwt.NewWithClaims(jwt.GetSigningMethod(SigningMethod), refreshClaims)
 	refreshToken.Header["kid"] = j.refreshPrimaryKid
 	refreshKey := j.refreshKeysByKid[j.refreshPrimaryKid]
 	refreshTokenString, err := refreshToken.SignedString(refreshKey)
