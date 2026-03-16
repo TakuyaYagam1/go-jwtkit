@@ -13,3 +13,10 @@ packages:
           filename: "RevocationStore.go"
           pkgname: "mock"
           structname: "MockRevocationStore"
+
+      Service:
+        config:
+          dir: "mock"
+          filename: "Service.go"
+          pkgname: "mock"
+          structname: "MockService"
