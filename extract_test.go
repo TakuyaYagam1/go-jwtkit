@@ -1,4 +1,4 @@
-package jwt_test
+package jwtkit
 
 import (
 	"net/http"
@@ -6,29 +6,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	jwt "github.com/TakuyaYagam1/go-jwtkit"
 )
 
 func TestExtractRaw(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest("GET", "/", nil)
-	assert.Empty(t, jwt.ExtractRaw(req))
+	assert.Empty(t, ExtractRaw(req))
 	req.Header.Set("Authorization", "Bearer abc123")
-	assert.Equal(t, "abc123", jwt.ExtractRaw(req))
+	assert.Equal(t, "abc123", ExtractRaw(req))
 	req.Header.Set("Authorization", "Bearer  ")
-	assert.Equal(t, "", jwt.ExtractRaw(req))
+	assert.Equal(t, "", ExtractRaw(req))
 }
 
 func TestExtractRawFromCookie(t *testing.T) {
 	t.Parallel()
 	r := httptest.NewRequest("GET", "/", nil)
-	assert.Empty(t, jwt.ExtractRawFromCookie(r, "token"))
+	assert.Empty(t, ExtractRawFromCookie(r, "token"))
 	r.AddCookie(&http.Cookie{Name: "token", Value: "abc"})
-	assert.Equal(t, "abc", jwt.ExtractRawFromCookie(r, "token"))
+	assert.Equal(t, "abc", ExtractRawFromCookie(r, "token"))
 	r = httptest.NewRequest("GET", "/", nil)
 	r.AddCookie(&http.Cookie{Name: "token", Value: "  x  "})
-	assert.Equal(t, "x", jwt.ExtractRawFromCookie(r, "token"))
+	assert.Equal(t, "x", ExtractRawFromCookie(r, "token"))
 	r = httptest.NewRequest("GET", "/", nil)
-	assert.Empty(t, jwt.ExtractRawFromCookie(r, "other"))
+	assert.Empty(t, ExtractRawFromCookie(r, "other"))
 }

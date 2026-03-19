@@ -1,4 +1,4 @@
-package jwt
+package jwtkit
 
 import (
 	"context"
@@ -18,6 +18,9 @@ func revocationTTL(claims *CustomClaims, fallback time.Duration) time.Duration {
 }
 
 func checkRevocationWithStore(ctx context.Context, claims *CustomClaims, revoker RevocationStore) error {
+	if revoker == nil {
+		return nil
+	}
 	if claims.ID == "" {
 		return fmt.Errorf("token missing jti claim")
 	}
@@ -25,15 +28,12 @@ func checkRevocationWithStore(ctx context.Context, claims *CustomClaims, revoker
 	if err != nil {
 		return fmt.Errorf("invalid user_id in claims: %w", err)
 	}
-	if revoker == nil {
-		return nil
-	}
 	revoked, err := revoker.IsRevoked(ctx, claims.ID)
 	if err != nil {
 		return fmt.Errorf("revocation check: %w", err)
 	}
 	if revoked {
-		return fmt.Errorf("token revoked")
+		return ErrTokenRevoked
 	}
 	var issuedAt int64
 	if claims.IssuedAt != nil {
@@ -44,7 +44,7 @@ func checkRevocationWithStore(ctx context.Context, claims *CustomClaims, revoker
 		return fmt.Errorf("user revocation check: %w", err)
 	}
 	if userRevoked {
-		return fmt.Errorf("token revoked")
+		return ErrTokenRevoked
 	}
 	return nil
 }
@@ -76,7 +76,7 @@ func refreshTokensFromClaims(
 	}
 	role := claims.Role
 	if fn := userRoleLookup; fn != nil {
-		_, _, freshRole, lookupErr := (*fn)(ctx, userID)
+		freshRole, lookupErr := (*fn)(ctx, userID)
 		if lookupErr != nil {
 			return nil, fmt.Errorf("failed to lookup user role during refresh: %w", lookupErr)
 		}

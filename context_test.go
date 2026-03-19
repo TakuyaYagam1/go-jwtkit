@@ -1,4 +1,4 @@
-package jwt_test
+package jwtkit
 
 import (
 	"context"
@@ -6,11 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	logmock "github.com/TakuyaYagam1/go-logkit/mock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	jwt "github.com/TakuyaYagam1/go-jwtkit"
 )
 
 func TestClaimsIntoContext_ClaimsFromContext(t *testing.T) {
@@ -23,11 +22,11 @@ func TestClaimsIntoContext_ClaimsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	_, ok := jwt.ClaimsFromContext(ctx)
+	_, ok := ClaimsFromContext(ctx)
 	assert.False(t, ok)
 
-	ctx = jwt.ClaimsIntoContext(ctx, claims)
-	c, ok := jwt.ClaimsFromContext(ctx)
+	ctx = ClaimsIntoContext(ctx, claims)
+	c, ok := ClaimsFromContext(ctx)
 	assert.True(t, ok)
 	assert.Equal(t, claims.UserID, c.UserID)
 }
@@ -41,23 +40,23 @@ func TestUserIDFromContext(t *testing.T) {
 	claims, err := svc.ValidateAccessToken(context.Background(), pair.AccessToken)
 	require.NoError(t, err)
 
-	ctx := jwt.ClaimsIntoContext(context.Background(), claims)
-	id, ok := jwt.UserIDFromContext(ctx)
+	ctx := ClaimsIntoContext(context.Background(), claims)
+	id, ok := UserIDFromContext(ctx)
 	assert.True(t, ok)
 	assert.Equal(t, userID, id)
 
-	_, ok = jwt.UserIDFromContext(context.Background())
+	_, ok = UserIDFromContext(context.Background())
 	assert.False(t, ok)
 }
 
 func TestRoleFromContext(t *testing.T) {
 	t.Parallel()
-	ctx := jwt.ClaimsIntoContext(context.Background(), &jwt.CustomClaims{Role: "admin"})
-	role, ok := jwt.RoleFromContext(ctx)
+	ctx := ClaimsIntoContext(context.Background(), &CustomClaims{Role: "admin"})
+	role, ok := RoleFromContext(ctx)
 	assert.True(t, ok)
 	assert.Equal(t, "admin", role)
 
-	_, ok = jwt.RoleFromContext(context.Background())
+	_, ok = RoleFromContext(context.Background())
 	assert.False(t, ok)
 }
 
@@ -68,8 +67,8 @@ func TestJWTAuth_Middleware(t *testing.T) {
 	pair, err := svc.GenerateTokenPair(context.Background(), userID, "user")
 	require.NoError(t, err)
 
-	handler := jwt.JWTAuth(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id, ok := jwt.UserIDFromContext(r.Context())
+	handler := JWTAuth(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := UserIDFromContext(r.Context())
 		assert.True(t, ok)
 		assert.Equal(t, userID, id)
 		w.WriteHeader(http.StatusOK)
@@ -85,7 +84,7 @@ func TestJWTAuth_Middleware(t *testing.T) {
 func TestJWTAuth_NoToken_401(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, nil)
-	handler := jwt.JWTAuth(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := JWTAuth(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 	req := httptest.NewRequest("GET", "/", nil)
@@ -97,7 +96,7 @@ func TestJWTAuth_NoToken_401(t *testing.T) {
 func TestJWTAuth_InvalidToken_401(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, nil)
-	handler := jwt.JWTAuth(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := JWTAuth(svc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 	req := httptest.NewRequest("GET", "/", nil)
@@ -105,4 +104,29 @@ func TestJWTAuth_InvalidToken_401(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestJWTAuth_NilService_500(t *testing.T) {
+	t.Parallel()
+	handler := JWTAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called")
+	}))
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestJWTAuth_WithLogger_NilService_500(t *testing.T) {
+	t.Parallel()
+	l := logmock.NewMockLogger(t)
+	l.On("Error", "jwt: JWTAuth nil Service (misconfigured), returning 500").Return()
+	handler := JWTAuth(nil, WithLogger(l))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called")
+	}))
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	l.AssertCalled(t, "Error", "jwt: JWTAuth nil Service (misconfigured), returning 500")
 }

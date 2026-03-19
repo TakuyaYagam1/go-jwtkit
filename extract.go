@@ -1,4 +1,4 @@
-package jwt
+package jwtkit
 
 import (
 	"net/http"
@@ -7,7 +7,9 @@ import (
 
 const maxTokenLength = 16 * 1024
 
-// ExtractRaw returns the raw JWT string from the Authorization header (Bearer scheme per RFC 6750). Returns "" if missing, invalid, r is nil, or token exceeds maxTokenLength. Scheme is case-insensitive; one or more spaces/tabs after "Bearer" are allowed.
+// ExtractRaw returns the raw JWT string from the Authorization header (Bearer scheme per RFC 6750).
+// Returns "" if the header is missing, not Bearer, r is nil, or the token exceeds maxTokenLength.
+// Scheme is case-insensitive; one or more spaces or tabs after "Bearer" are allowed.
 func ExtractRaw(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -33,7 +35,9 @@ func ExtractRaw(r *http.Request) string {
 	return token
 }
 
-// ExtractRawFromCookie returns the value of the named cookie (trimmed), or "" if the cookie is missing, r is nil, name is empty, the value is empty, or exceeds maxTokenLength.
+// ExtractRawFromCookie returns the value of the named cookie (trimmed of surrounding whitespace).
+// Returns "" if the cookie is missing, r is nil, name is empty, the value is empty, or exceeds maxTokenLength.
+// Use when the client sends the JWT in a cookie instead of the Authorization header.
 func ExtractRawFromCookie(r *http.Request, name string) string {
 	if r == nil || name == "" {
 		return ""

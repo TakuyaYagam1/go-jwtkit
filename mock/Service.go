@@ -40,23 +40,23 @@ func (_m *MockService) EXPECT() *MockService_Expecter {
 }
 
 // GenerateTokenPair provides a mock function for the type MockService
-func (_mock *MockService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, role string) (*jwt.TokenPair, error) {
+func (_mock *MockService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, role string) (*jwtkit.TokenPair, error) {
 	ret := _mock.Called(ctx, userID, role)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GenerateTokenPair")
 	}
 
-	var r0 *jwt.TokenPair
+	var r0 *jwtkit.TokenPair
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) (*jwt.TokenPair, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) (*jwtkit.TokenPair, error)); ok {
 		return returnFunc(ctx, userID, role)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) *jwt.TokenPair); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) *jwtkit.TokenPair); ok {
 		r0 = returnFunc(ctx, userID, role)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*jwt.TokenPair)
+			r0 = ret.Get(0).(*jwtkit.TokenPair)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, uuid.UUID, string) error); ok {
@@ -103,34 +103,34 @@ func (_c *MockService_GenerateTokenPair_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *MockService_GenerateTokenPair_Call) Return(tokenPair *jwt.TokenPair, err error) *MockService_GenerateTokenPair_Call {
+func (_c *MockService_GenerateTokenPair_Call) Return(tokenPair *jwtkit.TokenPair, err error) *MockService_GenerateTokenPair_Call {
 	_c.Call.Return(tokenPair, err)
 	return _c
 }
 
-func (_c *MockService_GenerateTokenPair_Call) RunAndReturn(run func(ctx context.Context, userID uuid.UUID, role string) (*jwt.TokenPair, error)) *MockService_GenerateTokenPair_Call {
+func (_c *MockService_GenerateTokenPair_Call) RunAndReturn(run func(ctx context.Context, userID uuid.UUID, role string) (*jwtkit.TokenPair, error)) *MockService_GenerateTokenPair_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RefreshTokens provides a mock function for the type MockService
-func (_mock *MockService) RefreshTokens(ctx context.Context, refreshTokenString string) (*jwt.TokenPair, error) {
+func (_mock *MockService) RefreshTokens(ctx context.Context, refreshTokenString string) (*jwtkit.TokenPair, error) {
 	ret := _mock.Called(ctx, refreshTokenString)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RefreshTokens")
 	}
 
-	var r0 *jwt.TokenPair
+	var r0 *jwtkit.TokenPair
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*jwt.TokenPair, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*jwtkit.TokenPair, error)); ok {
 		return returnFunc(ctx, refreshTokenString)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *jwt.TokenPair); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *jwtkit.TokenPair); ok {
 		r0 = returnFunc(ctx, refreshTokenString)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*jwt.TokenPair)
+			r0 = ret.Get(0).(*jwtkit.TokenPair)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -171,12 +171,12 @@ func (_c *MockService_RefreshTokens_Call) Run(run func(ctx context.Context, refr
 	return _c
 }
 
-func (_c *MockService_RefreshTokens_Call) Return(tokenPair *jwt.TokenPair, err error) *MockService_RefreshTokens_Call {
+func (_c *MockService_RefreshTokens_Call) Return(tokenPair *jwtkit.TokenPair, err error) *MockService_RefreshTokens_Call {
 	_c.Call.Return(tokenPair, err)
 	return _c
 }
 
-func (_c *MockService_RefreshTokens_Call) RunAndReturn(run func(ctx context.Context, refreshTokenString string) (*jwt.TokenPair, error)) *MockService_RefreshTokens_Call {
+func (_c *MockService_RefreshTokens_Call) RunAndReturn(run func(ctx context.Context, refreshTokenString string) (*jwtkit.TokenPair, error)) *MockService_RefreshTokens_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -353,23 +353,23 @@ func (_c *MockService_RevokeRefreshToken_Call) RunAndReturn(run func(ctx context
 }
 
 // ValidateAccessToken provides a mock function for the type MockService
-func (_mock *MockService) ValidateAccessToken(ctx context.Context, tokenString string) (*jwt.CustomClaims, error) {
+func (_mock *MockService) ValidateAccessToken(ctx context.Context, tokenString string) (*jwtkit.CustomClaims, error) {
 	ret := _mock.Called(ctx, tokenString)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ValidateAccessToken")
 	}
 
-	var r0 *jwt.CustomClaims
+	var r0 *jwtkit.CustomClaims
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*jwt.CustomClaims, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*jwtkit.CustomClaims, error)); ok {
 		return returnFunc(ctx, tokenString)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *jwt.CustomClaims); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *jwtkit.CustomClaims); ok {
 		r0 = returnFunc(ctx, tokenString)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*jwt.CustomClaims)
+			r0 = ret.Get(0).(*jwtkit.CustomClaims)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -410,34 +410,34 @@ func (_c *MockService_ValidateAccessToken_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *MockService_ValidateAccessToken_Call) Return(customClaims *jwt.CustomClaims, err error) *MockService_ValidateAccessToken_Call {
+func (_c *MockService_ValidateAccessToken_Call) Return(customClaims *jwtkit.CustomClaims, err error) *MockService_ValidateAccessToken_Call {
 	_c.Call.Return(customClaims, err)
 	return _c
 }
 
-func (_c *MockService_ValidateAccessToken_Call) RunAndReturn(run func(ctx context.Context, tokenString string) (*jwt.CustomClaims, error)) *MockService_ValidateAccessToken_Call {
+func (_c *MockService_ValidateAccessToken_Call) RunAndReturn(run func(ctx context.Context, tokenString string) (*jwtkit.CustomClaims, error)) *MockService_ValidateAccessToken_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ValidateRefreshToken provides a mock function for the type MockService
-func (_mock *MockService) ValidateRefreshToken(ctx context.Context, tokenString string) (*jwt.CustomClaims, error) {
+func (_mock *MockService) ValidateRefreshToken(ctx context.Context, tokenString string) (*jwtkit.CustomClaims, error) {
 	ret := _mock.Called(ctx, tokenString)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ValidateRefreshToken")
 	}
 
-	var r0 *jwt.CustomClaims
+	var r0 *jwtkit.CustomClaims
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*jwt.CustomClaims, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*jwtkit.CustomClaims, error)); ok {
 		return returnFunc(ctx, tokenString)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *jwt.CustomClaims); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *jwtkit.CustomClaims); ok {
 		r0 = returnFunc(ctx, tokenString)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*jwt.CustomClaims)
+			r0 = ret.Get(0).(*jwtkit.CustomClaims)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -478,12 +478,12 @@ func (_c *MockService_ValidateRefreshToken_Call) Run(run func(ctx context.Contex
 	return _c
 }
 
-func (_c *MockService_ValidateRefreshToken_Call) Return(customClaims *jwt.CustomClaims, err error) *MockService_ValidateRefreshToken_Call {
+func (_c *MockService_ValidateRefreshToken_Call) Return(customClaims *jwtkit.CustomClaims, err error) *MockService_ValidateRefreshToken_Call {
 	_c.Call.Return(customClaims, err)
 	return _c
 }
 
-func (_c *MockService_ValidateRefreshToken_Call) RunAndReturn(run func(ctx context.Context, tokenString string) (*jwt.CustomClaims, error)) *MockService_ValidateRefreshToken_Call {
+func (_c *MockService_ValidateRefreshToken_Call) RunAndReturn(run func(ctx context.Context, tokenString string) (*jwtkit.CustomClaims, error)) *MockService_ValidateRefreshToken_Call {
 	_c.Call.Return(run)
 	return _c
 }

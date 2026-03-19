@@ -1,4 +1,4 @@
-package jwt_test
+package jwtkit
 
 import (
 	"context"
@@ -13,8 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	jwt "github.com/TakuyaYagam1/go-jwtkit"
 )
 
 func mustRSAKeyPair(t *testing.T) (*rsa.PrivateKey, *rsa.PublicKey) {
@@ -38,7 +36,7 @@ func mustEd25519KeyPair(t *testing.T) (ed25519.PrivateKey, ed25519.PublicKey) {
 	return priv, pub
 }
 
-func testAsymmetricRoundtrip(t *testing.T, svc *jwt.JWTServiceAsymmetric) {
+func testAsymmetricRoundtrip(t *testing.T, svc *JWTServiceAsymmetric) {
 	t.Helper()
 	userID := uuid.New()
 	pair, err := svc.GenerateTokenPair(context.Background(), userID, "user")
@@ -47,17 +45,18 @@ func testAsymmetricRoundtrip(t *testing.T, svc *jwt.JWTServiceAsymmetric) {
 	claims, err := svc.ValidateAccessToken(context.Background(), pair.AccessToken)
 	require.NoError(t, err)
 	assert.Equal(t, userID.String(), claims.UserID)
-	assert.Equal(t, jwt.TokenTypeAccess, claims.TokenType)
+	assert.Equal(t, TokenTypeAccess, claims.TokenType)
 }
 
 func TestNewJWTServiceAsymmetric_RS256(t *testing.T) {
 	t.Parallel()
 	accessPriv, accessPub := mustRSAKeyPair(t)
 	refreshPriv, refreshPub := mustRSAKeyPair(t)
-	svc, err := jwt.NewJWTServiceAsymmetric(
-		[]jwt.AsymmetricKeyEntry{{Kid: "a1", PrivateKey: accessPriv, PublicKey: accessPub}},
-		[]jwt.AsymmetricKeyEntry{{Kid: "r1", PrivateKey: refreshPriv, PublicKey: refreshPub}},
-		time.Hour, time.Hour, testIssuer, nil, nil, "")
+	svc, err := NewJWTServiceAsymmetric(AsymmetricConfig{
+		AccessKeys:  []AsymmetricKeyEntry{{Kid: "a1", PrivateKey: accessPriv, PublicKey: accessPub}},
+		RefreshKeys: []AsymmetricKeyEntry{{Kid: "r1", PrivateKey: refreshPriv, PublicKey: refreshPub}},
+		AccessTTL:   time.Hour, RefreshTTL: time.Hour, Issuer: testIssuer,
+	})
 	require.NoError(t, err)
 	testAsymmetricRoundtrip(t, svc)
 }
@@ -77,10 +76,11 @@ func TestNewJWTServiceAsymmetric_ECDSA(t *testing.T) {
 			t.Parallel()
 			accessPriv, accessPub := mustECDSAKeyPair(t, tc.curve)
 			refreshPriv, refreshPub := mustECDSAKeyPair(t, tc.curve)
-			svc, err := jwt.NewJWTServiceAsymmetric(
-				[]jwt.AsymmetricKeyEntry{{Kid: "a1", PrivateKey: accessPriv, PublicKey: accessPub}},
-				[]jwt.AsymmetricKeyEntry{{Kid: "r1", PrivateKey: refreshPriv, PublicKey: refreshPub}},
-				time.Hour, time.Hour, testIssuer, nil, nil, "")
+			svc, err := NewJWTServiceAsymmetric(AsymmetricConfig{
+				AccessKeys:  []AsymmetricKeyEntry{{Kid: "a1", PrivateKey: accessPriv, PublicKey: accessPub}},
+				RefreshKeys: []AsymmetricKeyEntry{{Kid: "r1", PrivateKey: refreshPriv, PublicKey: refreshPub}},
+				AccessTTL:   time.Hour, RefreshTTL: time.Hour, Issuer: testIssuer,
+			})
 			require.NoError(t, err)
 			testAsymmetricRoundtrip(t, svc)
 		})
@@ -91,10 +91,11 @@ func TestNewJWTServiceAsymmetric_EdDSA(t *testing.T) {
 	t.Parallel()
 	accessPriv, accessPub := mustEd25519KeyPair(t)
 	refreshPriv, refreshPub := mustEd25519KeyPair(t)
-	svc, err := jwt.NewJWTServiceAsymmetric(
-		[]jwt.AsymmetricKeyEntry{{Kid: "a1", PrivateKey: accessPriv, PublicKey: accessPub}},
-		[]jwt.AsymmetricKeyEntry{{Kid: "r1", PrivateKey: refreshPriv, PublicKey: refreshPub}},
-		time.Hour, time.Hour, testIssuer, nil, nil, "")
+	svc, err := NewJWTServiceAsymmetric(AsymmetricConfig{
+		AccessKeys:  []AsymmetricKeyEntry{{Kid: "a1", PrivateKey: accessPriv, PublicKey: accessPub}},
+		RefreshKeys: []AsymmetricKeyEntry{{Kid: "r1", PrivateKey: refreshPriv, PublicKey: refreshPub}},
+		AccessTTL:   time.Hour, RefreshTTL: time.Hour, Issuer: testIssuer,
+	})
 	require.NoError(t, err)
 	testAsymmetricRoundtrip(t, svc)
 }
@@ -103,9 +104,10 @@ func TestNewJWTServiceAsymmetric_InvalidKeyPair(t *testing.T) {
 	t.Parallel()
 	rsaPriv, _ := mustRSAKeyPair(t)
 	_, ecPub := mustECDSAKeyPair(t, elliptic.P256())
-	_, err := jwt.NewJWTServiceAsymmetric(
-		[]jwt.AsymmetricKeyEntry{{Kid: "a1", PrivateKey: rsaPriv, PublicKey: ecPub}},
-		[]jwt.AsymmetricKeyEntry{{Kid: "r1", PrivateKey: rsaPriv, PublicKey: &rsaPriv.PublicKey}},
-		time.Hour, time.Hour, testIssuer, nil, nil, "")
+	_, err := NewJWTServiceAsymmetric(AsymmetricConfig{
+		AccessKeys:  []AsymmetricKeyEntry{{Kid: "a1", PrivateKey: rsaPriv, PublicKey: ecPub}},
+		RefreshKeys: []AsymmetricKeyEntry{{Kid: "r1", PrivateKey: rsaPriv, PublicKey: &rsaPriv.PublicKey}},
+		AccessTTL:   time.Hour, RefreshTTL: time.Hour, Issuer: testIssuer,
+	})
 	require.Error(t, err)
 }

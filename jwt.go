@@ -1,120 +1,135 @@
-package jwt
+package jwtkit
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
-// ErrTokenInvalid is returned by RevokeAccessToken when the token is expired, malformed, or otherwise invalid.
-var ErrTokenInvalid = errors.New("token already invalid or missing")
-
-// ErrRevokerRequired is returned by RefreshTokens when the service has no RevocationStore (required to prevent refresh token replay).
-var ErrRevokerRequired = errors.New("RefreshTokens requires a non-nil RevocationStore to prevent refresh token replay")
-
-// ErrTokenCannotRevoke is returned by RevokeAccessToken when the token has no JTI (claims.ID); such tokens cannot be revoked individually.
-var ErrTokenCannotRevoke = errors.New("token has no JTI and cannot be revoked")
-
 const (
-	MinSecretLength  = 32
-	MaxAccessTTL     = 24 * time.Hour
-	MaxRefreshTTL    = 90 * 24 * time.Hour
-	TokenTypeAccess  = "access"
-	TokenTypeRefresh = "refresh"
-	SigningMethod    = "HS256"
+	MinSecretLength  = 32                  // Minimum byte length for HS256 KeyEntry.Secret.
+	MaxAccessTTL     = 24 * time.Hour      // Maximum allowed access token TTL in Config.
+	MaxRefreshTTL    = 90 * 24 * time.Hour // Maximum allowed refresh token TTL in Config.
+	TokenTypeAccess  = "access"            // Value of token_type claim for access tokens.
+	TokenTypeRefresh = "refresh"           // Value of token_type claim for refresh tokens.
+	SigningMethod    = "HS256"             // Algorithm name for symmetric service.
 )
 
-// UserRoleLookup returns current email, full name, and role for a user. Used during RefreshTokens to refresh claims; may be nil.
-type UserRoleLookup func(ctx context.Context, userID uuid.UUID) (email, name, role string, err error)
+// UserRoleLookup returns the current role for a user.
+// Used during RefreshTokens to refresh claims before issuing a new token pair;
+// may be nil, in which case the role from the refresh token is reused.
+type UserRoleLookup func(ctx context.Context, userID uuid.UUID) (role string, err error)
 
-// KeyEntry holds a key id (kid) and secret for HS256 signing. Used for key rotation; first key in the slice is primary. Secret can be zeroed after use to reduce exposure in memory. Do not log Secret.
+// KeyEntry holds a key id (kid) and secret for HS256 signing.
+// Used for key rotation; the first key in the slice is the primary.
+// Secret can be zeroed after passing to NewJWTService to reduce exposure in memory.
+// Do not log or persist Secret in plain text.
 type KeyEntry struct {
-	Kid    string
-	Secret []byte
+	Kid    string // Key identifier; non-empty, unique per slice.
+	Secret []byte // At least MinSecretLength bytes; copied by NewJWTService.
 }
 
-// Service is the interface for JWT issuance, validation, refresh, and revocation. Implemented by JWTService and JWTServiceAsymmetric.
+// Config configures NewJWTService.
+// Issuer is required; AccessKeys and RefreshKeys must each contain at least one key.
+// Revoker and UserRoleLookup may be nil; RefreshTokens requires a non-nil Revoker (returns ErrRevokerRequired).
+// StrictKid when true rejects tokens without kid header; when false, missing kid falls back to the primary key.
+type Config struct {
+	AccessKeys     []KeyEntry      // HS256 keys for access tokens; first is primary.
+	RefreshKeys    []KeyEntry      // HS256 keys for refresh tokens; first is primary.
+	AccessTTL      time.Duration   // Lifetime of access tokens; must be positive, ≤ MaxAccessTTL.
+	RefreshTTL     time.Duration   // Lifetime of refresh tokens; must be positive, ≤ MaxRefreshTTL.
+	Issuer         string          // Required; set in iss claim and validated on parse.
+	Audience       string          // Optional; if non-empty, aud claim is set and validated.
+	Revoker        RevocationStore // Optional; required for RefreshTokens and Revoke* methods.
+	UserRoleLookup UserRoleLookup  // Optional; called during RefreshTokens to refresh role.
+	StrictKid      bool            // If true, token must have kid header; no fallback to primary.
+}
+
+// Service is the interface for JWT issuance, validation, refresh, and revocation.
+// Implemented by JWTService (HS256) and JWTServiceAsymmetric (RS256/ES256/EdDSA).
+// All methods accept context.Context as first argument; cancellation is respected where applicable.
 type Service interface {
+	// GenerateTokenPair issues a new access and refresh token pair for the user and role.
 	GenerateTokenPair(ctx context.Context, userID uuid.UUID, role string) (*TokenPair, error)
+	// ValidateAccessToken parses and validates the access token; checks revocation if RevocationStore is set.
 	ValidateAccessToken(ctx context.Context, tokenString string) (*CustomClaims, error)
+	// ValidateRefreshToken parses and validates the refresh token; checks revocation if RevocationStore is set.
 	ValidateRefreshToken(ctx context.Context, tokenString string) (*CustomClaims, error)
+	// RefreshTokens validates the refresh token, revokes it (one-time use), and returns a new token pair.
 	RefreshTokens(ctx context.Context, refreshTokenString string) (*TokenPair, error)
+	// RevokeRefreshToken marks the refresh token as revoked (e.g. logout).
 	RevokeRefreshToken(ctx context.Context, refreshTokenString string) error
+	// RevokeAccessToken marks the access token as revoked.
 	RevokeAccessToken(ctx context.Context, accessTokenString string) error
+	// RevokeAllForUser revokes all tokens for the user (e.g. logout everywhere, password change).
 	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
 }
 
-// JWTService implements Service using HS256. Use NewJWTService to construct.
+// JWTService implements Service using HS256 symmetric signing.
+// Use NewJWTService to construct; do not instantiate manually.
 type JWTService struct {
+	core
 	accessKeysByKid   map[string][]byte
 	refreshKeysByKid  map[string][]byte
 	accessPrimaryKid  string
 	refreshPrimaryKid string
-	accessTTL         time.Duration
-	refreshTTL        time.Duration
 	issuer            string
 	audience          string
-	revoker           RevocationStore
-	userRoleLookup    atomic.Pointer[UserRoleLookup]
-	strictKid         atomic.Bool
 }
 
-// CustomClaims extends jwt.RegisteredClaims with user_id, role, and token_type. Used for both access and refresh tokens. Email and full name are not stored in the token; use a /me or user API when the client needs them.
+// CustomClaims extends jwt.RegisteredClaims with user_id, role, and token_type.
+// Used for both access and refresh tokens; token_type distinguishes them (TokenTypeAccess / TokenTypeRefresh).
+// Email and full name are not stored in the token; use a /me or user API when the client needs them.
 type CustomClaims struct {
-	UserID    string `json:"user_id"`
-	Role      string `json:"role,omitempty"`
-	TokenType string `json:"token_type"`
+	UserID    string `json:"user_id"`        // UUID of the user.
+	Role      string `json:"role,omitempty"` // Role for authorization; optional.
+	TokenType string `json:"token_type"`     // TokenTypeAccess or TokenTypeRefresh.
 	jwt.RegisteredClaims
 }
 
-// TokenPair holds the access and refresh token strings and their Unix expiry timestamps for the client.
+// TokenPair holds the access and refresh token strings and their Unix expiry timestamps.
+// Returned by GenerateTokenPair and RefreshTokens; send to the client for storage and Authorization header.
 type TokenPair struct {
-	AccessToken      string `json:"access_token"`
-	RefreshToken     string `json:"refresh_token"`
-	AccessExpiresAt  int64  `json:"access_expires_at"`
-	RefreshExpiresAt int64  `json:"refresh_expires_at"`
+	AccessToken      string `json:"access_token"`       // JWT string for access; send in Authorization: Bearer.
+	RefreshToken     string `json:"refresh_token"`      // JWT string for refresh; use only to call refresh endpoint.
+	AccessExpiresAt  int64  `json:"access_expires_at"`  // Unix seconds when access token expires.
+	RefreshExpiresAt int64  `json:"refresh_expires_at"` // Unix seconds when refresh token expires.
 }
 
-// NewJWTService builds an HS256 JWT service. Issuer must be non-empty; access and refresh key slices must each contain at least one key; all secrets at least MinSecretLength bytes; Kid non-empty and unique. userRoleLookup and revoker may be nil; RefreshTokens requires a non-nil revoker (returns ErrRevokerRequired otherwise). Non-empty audience adds aud claim and validation.
-// The service copies secret bytes internally; the caller may zero KeyEntry.Secret slices after the call to reduce exposure in memory.
-func NewJWTService(
-	accessKeys []KeyEntry,
-	refreshKeys []KeyEntry,
-	accessTTL time.Duration,
-	refreshTTL time.Duration,
-	issuer string,
-	revoker RevocationStore,
-	userRoleLookup UserRoleLookup,
-	audience string,
-) (*JWTService, error) {
-	if len(accessKeys) == 0 {
+// NewJWTService builds an HS256 JWT service from Config.
+// Issuer must be non-empty; AccessKeys and RefreshKeys must each contain at least one key.
+// All secrets must be at least MinSecretLength bytes; Kid must be non-empty and unique per slice.
+// Revoker and UserRoleLookup may be nil; RefreshTokens requires a non-nil Revoker (returns ErrRevokerRequired).
+// Non-empty Audience adds aud claim and validates it on parse.
+// AccessTTL and RefreshTTL must be positive and not exceed MaxAccessTTL / MaxRefreshTTL.
+// The service copies secret bytes internally; the caller may zero KeyEntry.Secret slices after the call.
+func NewJWTService(cfg Config) (*JWTService, error) {
+	if len(cfg.AccessKeys) == 0 {
 		return nil, fmt.Errorf("access keys must contain at least one key")
 	}
-	if len(refreshKeys) == 0 {
+	if len(cfg.RefreshKeys) == 0 {
 		return nil, fmt.Errorf("refresh keys must contain at least one key")
 	}
-	if issuer == "" {
+	if cfg.Issuer == "" {
 		return nil, fmt.Errorf("issuer is required")
 	}
-	if accessTTL <= 0 {
+	if cfg.AccessTTL <= 0 {
 		return nil, fmt.Errorf("accessTTL must be positive")
 	}
-	if refreshTTL <= 0 {
+	if cfg.RefreshTTL <= 0 {
 		return nil, fmt.Errorf("refreshTTL must be positive")
 	}
-	if accessTTL > MaxAccessTTL {
+	if cfg.AccessTTL > MaxAccessTTL {
 		return nil, fmt.Errorf("accessTTL must not exceed %v", MaxAccessTTL)
 	}
-	if refreshTTL > MaxRefreshTTL {
+	if cfg.RefreshTTL > MaxRefreshTTL {
 		return nil, fmt.Errorf("refreshTTL must not exceed %v", MaxRefreshTTL)
 	}
-	accessByKid := make(map[string][]byte, len(accessKeys))
-	for _, k := range accessKeys {
+	accessByKid := make(map[string][]byte, len(cfg.AccessKeys))
+	for _, k := range cfg.AccessKeys {
 		if k.Kid == "" {
 			return nil, fmt.Errorf("access key Kid must be non-empty")
 		}
@@ -128,8 +143,8 @@ func NewJWTService(
 		copy(dst, k.Secret)
 		accessByKid[k.Kid] = dst
 	}
-	refreshByKid := make(map[string][]byte, len(refreshKeys))
-	for _, k := range refreshKeys {
+	refreshByKid := make(map[string][]byte, len(cfg.RefreshKeys))
+	for _, k := range cfg.RefreshKeys {
 		if k.Kid == "" {
 			return nil, fmt.Errorf("refresh key Kid must be non-empty")
 		}
@@ -146,45 +161,35 @@ func NewJWTService(
 	svc := &JWTService{
 		accessKeysByKid:   accessByKid,
 		refreshKeysByKid:  refreshByKid,
-		accessPrimaryKid:  accessKeys[0].Kid,
-		refreshPrimaryKid: refreshKeys[0].Kid,
-		accessTTL:         accessTTL,
-		refreshTTL:        refreshTTL,
-		issuer:            issuer,
-		audience:          audience,
-		revoker:           revoker,
+		accessPrimaryKid:  cfg.AccessKeys[0].Kid,
+		refreshPrimaryKid: cfg.RefreshKeys[0].Kid,
+		issuer:            cfg.Issuer,
+		audience:          cfg.Audience,
 	}
-	if userRoleLookup != nil {
-		svc.userRoleLookup.Store(&userRoleLookup)
-	}
+	svc.core = *newCore(
+		func(ctx context.Context, s string) (*CustomClaims, error) {
+			return svc.rawValidateToken(ctx, s, TokenTypeAccess, svc.accessPrimaryKid, svc.accessKeysByKid, svc.StrictKid())
+		},
+		func(ctx context.Context, s string) (*CustomClaims, error) {
+			return svc.rawValidateToken(ctx, s, TokenTypeRefresh, svc.refreshPrimaryKid, svc.refreshKeysByKid, svc.StrictKid())
+		},
+		svc.GenerateTokenPair,
+		cfg.Revoker,
+		cfg.UserRoleLookup,
+		cfg.StrictKid,
+		cfg.AccessTTL,
+		cfg.RefreshTTL,
+	)
 	return svc, nil
 }
 
-// SetUserRoleLookup sets or replaces the UserRoleLookup callback used during RefreshTokens. Safe for concurrent use.
-func (j *JWTService) SetUserRoleLookup(fn UserRoleLookup) {
-	j.userRoleLookup.Store(&fn)
-}
-
-// SetStrictKid when true rejects tokens that do not include a non-empty kid in the header (no fallback to primary key).
-func (j *JWTService) SetStrictKid(strict bool) {
-	j.strictKid.Store(strict)
-}
-
-// StrictKid returns whether tokens without kid header are rejected.
-func (j *JWTService) StrictKid() bool {
-	return j.strictKid.Load()
-}
-
-// RevocationEnabled reports whether revocation is checked on ValidateAccessToken/ValidateRefreshToken (revoker is non-nil).
-func (j *JWTService) RevocationEnabled() bool {
-	return j.revoker != nil
-}
-
-// GenerateTokenPair issues a new access and refresh token pair with unique JTIs and the given user id and role.
+// GenerateTokenPair issues a new access and refresh token pair with unique JTIs.
+// userID and role are stored in both tokens; use after login or registration.
+// Returns (*TokenPair, nil) or an error (e.g. if signing fails).
 func (j *JWTService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, role string) (*TokenPair, error) {
 	now := time.Now()
-	accessExpiry := now.Add(j.accessTTL)
-	refreshExpiry := now.Add(j.refreshTTL)
+	accessExpiry := now.Add(j.core.AccessTTL())
+	refreshExpiry := now.Add(j.core.RefreshTTL())
 
 	accessJTI := uuid.New().String()
 	refreshJTI := uuid.New().String()
@@ -247,17 +252,10 @@ func (j *JWTService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, ro
 	}, nil
 }
 
-// ValidateAccessToken parses the token and validates signature, issuer, audience (if set), token type, and revocation (if revoker is set).
-func (j *JWTService) ValidateAccessToken(ctx context.Context, tokenString string) (*CustomClaims, error) {
-	return j.validateToken(ctx, tokenString, TokenTypeAccess, j.accessPrimaryKid, j.accessKeysByKid)
-}
-
-// ValidateRefreshToken parses the token and validates signature, issuer, audience (if set), token type, and revocation (if revoker is set).
-func (j *JWTService) ValidateRefreshToken(ctx context.Context, tokenString string) (*CustomClaims, error) {
-	return j.validateToken(ctx, tokenString, TokenTypeRefresh, j.refreshPrimaryKid, j.refreshKeysByKid)
-}
-
-func (j *JWTService) validateToken(ctx context.Context, tokenString, tokenType, primaryKid string, keysByKid map[string][]byte) (*CustomClaims, error) {
+func (j *JWTService) rawValidateToken(ctx context.Context, tokenString, tokenType, primaryKid string, keysByKid map[string][]byte, strict bool) (*CustomClaims, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	opts := []jwt.ParserOption{
 		jwt.WithIssuer(j.issuer),
 		jwt.WithValidMethods([]string{"HS256"}),
@@ -268,12 +266,12 @@ func (j *JWTService) validateToken(ctx context.Context, tokenString, tokenType, 
 	}
 	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {
-			return nil, fmt.Errorf("unexpected signing method")
+			return nil, ErrUnexpectedSigningMethod
 		}
-		if j.strictKid.Load() {
+		if strict {
 			k, ok := token.Header["kid"].(string)
 			if !ok || k == "" {
-				return nil, fmt.Errorf("token missing kid header")
+				return nil, ErrMissingKidHeader
 			}
 		}
 		kid := primaryKid
@@ -282,7 +280,7 @@ func (j *JWTService) validateToken(ctx context.Context, tokenString, tokenType, 
 		}
 		key, ok := keysByKid[kid]
 		if !ok {
-			return nil, fmt.Errorf("invalid token")
+			return nil, ErrInvalidToken
 		}
 		return key, nil
 	}, opts...)
@@ -290,88 +288,15 @@ func (j *JWTService) validateToken(ctx context.Context, tokenString, tokenType, 
 		return nil, fmt.Errorf("failed to validate %s token: %w", tokenType, err)
 	}
 	if token == nil {
-		return nil, fmt.Errorf("failed to validate %s token: invalid token", tokenType)
+		return nil, fmt.Errorf("failed to validate %s token: %w", tokenType, ErrInvalidToken)
 	}
 
 	claims, ok := token.Claims.(*CustomClaims)
 	if !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+		return nil, fmt.Errorf("failed to validate %s token: %w", tokenType, ErrInvalidToken)
 	}
 	if claims.TokenType != tokenType {
-		return nil, fmt.Errorf("invalid token type")
-	}
-	if err := j.checkRevocation(ctx, claims); err != nil {
-		return nil, fmt.Errorf("jwt validate %s: %w", tokenType, err)
+		return nil, fmt.Errorf("failed to validate %s token: %w", tokenType, ErrInvalidTokenType)
 	}
 	return claims, nil
-}
-
-func (j *JWTService) checkRevocation(ctx context.Context, claims *CustomClaims) error {
-	return checkRevocationWithStore(ctx, claims, j.revoker)
-}
-
-// RevokeRefreshToken validates the refresh token then marks its JTI as revoked. Expired tokens are rejected before revocation. TTL for the revocation key is until token expiry (or refreshTTL if not set). Returns ErrTokenInvalid when the token is expired, malformed, or invalid; ErrTokenCannotRevoke when the token has no JTI.
-func (j *JWTService) RevokeRefreshToken(ctx context.Context, refreshTokenString string) error {
-	claims, err := j.ValidateRefreshToken(ctx, refreshTokenString)
-	if err != nil {
-		return ErrTokenInvalid
-	}
-	if claims.ID == "" {
-		return ErrTokenCannotRevoke
-	}
-	if j.revoker == nil {
-		return ErrRevokerRequired
-	}
-	ttl := revocationTTL(claims, j.refreshTTL)
-	return j.revoker.Revoke(ctx, claims.ID, ttl)
-}
-
-// RefreshTokens validates the refresh token, atomically revokes it (RevokeIfFirst) to prevent replay, and issues a new token pair. Uses UserRoleLookup if set to refresh email/name/role. Returns ErrRevokerRequired if revoker is nil.
-func (j *JWTService) RefreshTokens(ctx context.Context, refreshTokenString string) (*TokenPair, error) {
-	if j.revoker == nil {
-		return nil, ErrRevokerRequired
-	}
-	claims, err := j.ValidateRefreshToken(ctx, refreshTokenString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate refresh token: %w", err)
-	}
-	var fn *UserRoleLookup
-	if loaded := j.userRoleLookup.Load(); loaded != nil && *loaded != nil {
-		fn = loaded
-	}
-	return refreshTokensFromClaims(ctx, claims, j.revoker, j.refreshTTL, fn, j.GenerateTokenPair)
-}
-
-// RevokeAccessToken validates the access token then marks its JTI as revoked. Returns ErrTokenInvalid when the token is expired, malformed, or invalid; ErrTokenCannotRevoke when the token has no JTI; ErrRevokerRequired when revoker is nil.
-func (j *JWTService) RevokeAccessToken(ctx context.Context, accessTokenString string) error {
-	claims, err := j.ValidateAccessToken(ctx, accessTokenString)
-	if err != nil {
-		return ErrTokenInvalid
-	}
-	if claims.ID == "" {
-		return ErrTokenCannotRevoke
-	}
-	if j.revoker == nil {
-		return ErrRevokerRequired
-	}
-	ttl := j.accessTTL
-	if claims.ExpiresAt != nil {
-		ttl = time.Until(claims.ExpiresAt.Time)
-		if ttl <= 0 {
-			return nil
-		}
-	}
-	return j.revoker.Revoke(ctx, claims.ID, ttl)
-}
-
-// RevokeAllForUser stores a user revocation timestamp so that any token issued at or before that time is considered revoked. Use after password change or global logout.
-func (j *JWTService) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
-	if j.revoker == nil {
-		return ErrRevokerRequired
-	}
-	ttl := j.refreshTTL
-	if j.accessTTL > ttl {
-		ttl = j.accessTTL
-	}
-	return j.revoker.RevokeUserTokens(ctx, userID, ttl)
 }

@@ -18,21 +18,26 @@ import "github.com/TakuyaYagam1/go-jwtkit"
 - **RS256 / EdDSA** (asymmetric): NewJWTServiceAsymmetric with AsymmetricKeyEntry key pairs
 - Access and refresh tokens with configurable TTLs and issuer
 - **RevocationStore**: blacklist JTIs and user-level revocation (e.g. RedisRevocationStore)
-- **UserRoleLookup**: refresh email/name/role when issuing new tokens from refresh token
+- **UserRoleLookup**: refresh role when issuing new tokens from refresh token
 - **HTTP**: JWTAuth middleware; ExtractRaw, ExtractRawFromCookie; ClaimsFromContext, UserIDFromContext, RoleFromContext
 
 ## Example
 
 ```go
-svc, err := jwt.NewJWTService(
-    []jwt.KeyEntry{{Kid: "0", Secret: accessSecret}},
-    []jwt.KeyEntry{{Kid: "0", Secret: refreshSecret}},
-    time.Hour, 24*time.Hour, "my-app", redisRevoker, userRoleLookup,
-)
-pair, _ := svc.GenerateTokenPair(ctx, userID, email, name, role)
+svc, err := jwt.NewJWTService(jwt.Config{
+    AccessKeys:     []jwt.KeyEntry{{Kid: "0", Secret: accessSecret}},
+    RefreshKeys:    []jwt.KeyEntry{{Kid: "0", Secret: refreshSecret}},
+    AccessTTL:      time.Hour,
+    RefreshTTL:      24 * time.Hour,
+    Issuer:         "my-app",
+    Revoker:        redisRevoker,
+    UserRoleLookup: userRoleLookup,
+    Audience:       "",
+})
+pair, _ := svc.GenerateTokenPair(ctx, userID, "admin")
 
 mux := http.NewServeMux()
-mux.Handle("/api/", jwt.JWTAuth(svc, apiHandler))
+mux.Handle("/api/", jwt.JWTAuth(svc)(apiHandler))
 ```
 
 In handlers after JWTAuth:
@@ -47,12 +52,13 @@ claims, ok := jwt.ClaimsFromContext(r.Context())
 | Symbol | Description |
 |--------|-------------|
 | Service | Interface: GenerateTokenPair, ValidateAccessToken, ValidateRefreshToken, RefreshTokens, Revoke*, RevokeAllForUser |
-| JWTService | HS256 implementation; NewJWTService |
-| JWTServiceAsymmetric | RS256/EdDSA implementation; NewJWTServiceAsymmetric, AsymmetricKeyEntry |
-| CustomClaims | UserID, Email, FullName, Role, TokenType, RegisteredClaims |
+| JWTService | HS256 implementation; NewJWTService(Config) |
+| JWTServiceAsymmetric | RS256/ES256/ES384/ES512/EdDSA implementation; NewJWTServiceAsymmetric(AsymmetricConfig), AsymmetricKeyEntry |
+| Config, AsymmetricConfig | Config structs for constructors |
+| CustomClaims | UserID, Role, TokenType, RegisteredClaims |
 | TokenPair | AccessToken, RefreshToken, AccessExpiresAt, RefreshExpiresAt |
 | KeyEntry | Kid, Secret (symmetric) |
 | RevocationStore | Revoke, IsRevoked, RevokeUserTokens, IsUserRevoked; RedisRevocationStore |
-| JWTAuth(svc, next) | HTTP middleware: Bearer validation, claims in context; 401 on failure |
+| JWTAuth(svc) | Returns func(http.Handler) http.Handler: Bearer validation, claims in context; 401 on failure, 500 if svc is nil |
 | ExtractRaw(r), ExtractRawFromCookie(r, name) | Raw token from header or cookie |
 | ClaimsIntoContext, ClaimsFromContext, UserIDFromContext, RoleFromContext | Context helpers |

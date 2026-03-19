@@ -1,4 +1,4 @@
-// Package jwt provides JWT issuance, validation, and revocation for access/refresh token pairs.
+// package jwtkit provides JWT issuance, validation, and revocation for access/refresh token pairs.
 //
 // # HS256 (symmetric)
 //
@@ -7,7 +7,7 @@
 //
 // # RS256 / EdDSA (asymmetric)
 //
-// Use NewJWTServiceAsymmetric with AsymmetricKeyEntry key pairs. Supports RSA (RS256, min 2048 bits), ECDSA (ES256/ES384/ES512 for P-256/P-384/P-521), and Ed25519 (EdDSA). Same revocation and UserRoleLookup semantics as HS256.
+// Use NewJWTServiceAsymmetric with AsymmetricKeyEntry key pairs. Supports RSA (RS256 only, min 2048 bits), ECDSA (ES256/ES384/ES512 for P-256/P-384/P-521), and Ed25519 (EdDSA). Same revocation and UserRoleLookup semantics as HS256.
 //
 // # Revocation
 //
@@ -15,13 +15,13 @@
 //
 // # HTTP integration
 //
-// JWTAuth middleware validates the Bearer token via ValidateAccessToken and stores claims in the request context; JWTAuthWithLogger(svc, errLog) uses ErrorLogger for validation errors. Use ClaimsIntoContext to set claims, ClaimsFromContext, UserIDFromContext, RoleFromContext to read them in handlers. ExtractRaw reads the token from the Authorization header (RFC 6750); ExtractRawFromCookie from a cookie.
+// JWTAuth middleware validates the Bearer token via ValidateAccessToken and stores claims in the request context; WithLogger option enables logging via go-logkit. Use ClaimsIntoContext to set claims, ClaimsFromContext, UserIDFromContext, RoleFromContext to read them in handlers. ExtractRaw reads the token from the Authorization header (RFC 6750); ExtractRawFromCookie from a cookie.
 //
 // # Errors
 //
-// ErrTokenInvalid is returned by RevokeAccessToken and RevokeRefreshToken when the token fails validation. ErrTokenCannotRevoke when the token has no JTI. ErrRevokerRequired when RefreshTokens or revocation methods are called without a RevocationStore. ErrEmptyJTI and ErrNoRedisClient are from the revocation layer. Do not expose validation error messages to clients; use a generic message (e.g. "invalid token").
+// ErrTokenInvalid, ErrInvalidTokenType, ErrUnexpectedSigningMethod, ErrMissingKidHeader, ErrTokenRevoked, ErrInvalidToken are sentinel errors for validation; use errors.Is to detect them. ErrTokenCannotRevoke when the token has no JTI. ErrRevokerRequired when RefreshTokens or revocation methods are called without a RevocationStore. ErrEmptyJTI and ErrNoRedisClient are from the revocation layer. Do not expose validation error messages to clients; use a generic message (e.g. "invalid token").
 //
 // # Redis revocation TTL
 //
 // RedisRevocationStore treats TTL below 1 second as 7 days to satisfy Redis key expiry constraints. Pass at least 1s for shorter revocation windows.
-package jwt
+package jwtkit
