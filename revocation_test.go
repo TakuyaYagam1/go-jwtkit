@@ -221,3 +221,116 @@ func TestRedisRevocationStore_RevokeIfFirst_KeyExists_ReturnsFalse(t *testing.T)
 	assert.False(t, first)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestRedisRevocationStore_RevokeIfFirst_EmptyJTI(t *testing.T) {
+	t.Parallel()
+	db, _ := redismock.NewClientMock()
+	store := NewRedisRevocationStore(db)
+	_, err := store.RevokeIfFirst(context.Background(), "", time.Hour)
+	require.ErrorIs(t, err, ErrEmptyJTI)
+}
+
+func TestRedisRevocationStore_RevokeIfFirst_NilClient(t *testing.T) {
+	t.Parallel()
+	store := &RedisRevocationStore{client: nil}
+	_, err := store.RevokeIfFirst(context.Background(), "jti", time.Hour)
+	require.ErrorIs(t, err, ErrNoRedisClient)
+}
+
+func TestRedisRevocationStore_RevokeIfFirst_DefaultTTL(t *testing.T) {
+	t.Parallel()
+	db, mock := redismock.NewClientMock()
+	mock.ExpectSetNX("jwt:revoked:jti-ttl", "1", 7*24*time.Hour).SetVal(true)
+	store := NewRedisRevocationStore(db)
+	first, err := store.RevokeIfFirst(context.Background(), "jti-ttl", 0)
+	require.NoError(t, err)
+	assert.True(t, first)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRedisRevocationStore_RevokeIfFirst_RedisError(t *testing.T) {
+	t.Parallel()
+	db, mock := redismock.NewClientMock()
+	mock.ExpectSetNX("jwt:revoked:err-jti", "1", time.Hour).SetErr(errors.New("redis down"))
+	store := NewRedisRevocationStore(db)
+	_, err := store.RevokeIfFirst(context.Background(), "err-jti", time.Hour)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "revoke if first")
+}
+
+func TestWithRevocationKeyPrefix(t *testing.T) {
+	t.Parallel()
+	db, mock := redismock.NewClientMock()
+	store := NewRedisRevocationStore(db, WithRevocationKeyPrefix("myapp:"))
+	mock.ExpectSet("myapp:jwt:revoked:jti-1", "1", time.Hour).SetVal("OK")
+	err := store.Revoke(context.Background(), "jti-1", time.Hour)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWithRevocationKeyPrefix_IsRevoked(t *testing.T) {
+	t.Parallel()
+	db, mock := redismock.NewClientMock()
+	store := NewRedisRevocationStore(db, WithRevocationKeyPrefix("svc:"))
+	mock.ExpectExists("svc:jwt:revoked:jti-1").SetVal(1)
+	revoked, err := store.IsRevoked(context.Background(), "jti-1")
+	require.NoError(t, err)
+	assert.True(t, revoked)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWithRevocationNowFunc(t *testing.T) {
+	t.Parallel()
+	db, mock := redismock.NewClientMock()
+	fixed := time.Unix(1700000000, 0)
+	store := NewRedisRevocationStore(db, WithRevocationNowFunc(func() time.Time { return fixed }))
+	userID := uuid.New()
+	key := "jwt:user_revoked_at:" + userID.String()
+	mock.ExpectEval(revokeUserTokensScript, []string{key}, "1700000000", 3600).SetVal("OK")
+	err := store.RevokeUserTokens(context.Background(), userID, time.Hour)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRedisRevocationStore_RevokeUserTokens_NilUUID(t *testing.T) {
+	t.Parallel()
+	db, _ := redismock.NewClientMock()
+	store := NewRedisRevocationStore(db)
+	err := store.RevokeUserTokens(context.Background(), uuid.Nil, time.Hour)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "user id is required")
+}
+
+func TestRedisRevocationStore_RevokeUserTokens_RedisError(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	db, mock := redismock.NewClientMock()
+	key := "jwt:user_revoked_at:" + userID.String()
+	fixed := time.Unix(1700000000, 0)
+	store := NewRedisRevocationStore(db, WithRevocationNowFunc(func() time.Time { return fixed }))
+	mock.ExpectEval(revokeUserTokensScript, []string{key}, "1700000000", 3600).SetErr(errors.New("redis down"))
+	err := store.RevokeUserTokens(context.Background(), userID, time.Hour)
+	require.Error(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRedisRevocationStore_IsUserRevoked_ParseError(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	db, mock := redismock.NewClientMock()
+	mock.ExpectGet("jwt:user_revoked_at:" + userID.String()).SetVal("not-a-number")
+	store := NewRedisRevocationStore(db)
+	_, err := store.IsUserRevoked(context.Background(), userID, 1000)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse")
+}
+
+func TestRedisRevocationStore_IsUserRevoked_RedisError(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	db, mock := redismock.NewClientMock()
+	mock.ExpectGet("jwt:user_revoked_at:" + userID.String()).SetErr(errors.New("redis down"))
+	store := NewRedisRevocationStore(db)
+	_, err := store.IsUserRevoked(context.Background(), userID, 1000)
+	require.Error(t, err)
+}

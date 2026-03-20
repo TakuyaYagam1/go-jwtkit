@@ -190,43 +190,7 @@ func (j *JWTService) GenerateTokenPair(ctx context.Context, userID uuid.UUID, ro
 	now := time.Now()
 	accessExpiry := now.Add(j.core.AccessTTL())
 	refreshExpiry := now.Add(j.core.RefreshTTL())
-
-	accessJTI := uuid.New().String()
-	refreshJTI := uuid.New().String()
-
-	accessReg := jwt.RegisteredClaims{
-		ID:        accessJTI,
-		ExpiresAt: jwt.NewNumericDate(accessExpiry),
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		Issuer:    j.issuer,
-	}
-	if j.audience != "" {
-		accessReg.Audience = jwt.ClaimStrings{j.audience}
-	}
-	accessClaims := &CustomClaims{
-		UserID:           userID.String(),
-		Role:             role,
-		TokenType:        TokenTypeAccess,
-		RegisteredClaims: accessReg,
-	}
-
-	refreshReg := jwt.RegisteredClaims{
-		ID:        refreshJTI,
-		ExpiresAt: jwt.NewNumericDate(refreshExpiry),
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		Issuer:    j.issuer,
-	}
-	if j.audience != "" {
-		refreshReg.Audience = jwt.ClaimStrings{j.audience}
-	}
-	refreshClaims := &CustomClaims{
-		UserID:           userID.String(),
-		Role:             role,
-		TokenType:        TokenTypeRefresh,
-		RegisteredClaims: refreshReg,
-	}
+	accessClaims, refreshClaims := buildTokenPairClaims(userID, role, j.issuer, j.audience, accessExpiry, refreshExpiry, now)
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	accessToken.Header["kid"] = j.accessPrimaryKid

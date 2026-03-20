@@ -5,8 +5,49 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
+
+func buildTokenPairClaims(userID uuid.UUID, role, issuer, audience string, accessExpiry, refreshExpiry, now time.Time) (accessClaims, refreshClaims *CustomClaims) {
+	accessJTI := uuid.New().String()
+	refreshJTI := uuid.New().String()
+
+	accessReg := jwt.RegisteredClaims{
+		ID:        accessJTI,
+		ExpiresAt: jwt.NewNumericDate(accessExpiry),
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		Issuer:    issuer,
+	}
+	if audience != "" {
+		accessReg.Audience = jwt.ClaimStrings{audience}
+	}
+	accessClaims = &CustomClaims{
+		UserID:           userID.String(),
+		Role:             role,
+		TokenType:        TokenTypeAccess,
+		RegisteredClaims: accessReg,
+	}
+
+	refreshReg := jwt.RegisteredClaims{
+		ID:        refreshJTI,
+		ExpiresAt: jwt.NewNumericDate(refreshExpiry),
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		Issuer:    issuer,
+	}
+	if audience != "" {
+		refreshReg.Audience = jwt.ClaimStrings{audience}
+	}
+	refreshClaims = &CustomClaims{
+		UserID:           userID.String(),
+		Role:             role,
+		TokenType:        TokenTypeRefresh,
+		RegisteredClaims: refreshReg,
+	}
+	return accessClaims, refreshClaims
+}
 
 func revocationTTL(claims *CustomClaims, fallback time.Duration) time.Duration {
 	if claims.ExpiresAt != nil {
