@@ -1,4 +1,4 @@
-module github.com/takuya-go-kit/go-jwtkit
+module github.com/wahrwelt-kit/go-jwtkit
 
 go 1.25.0
 
@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/stretchr/testify v1.11.1
-	github.com/takuya-go-kit/go-logkit v0.2.0
+	github.com/wahrwelt-kit/go-logkit v0.2.0
 )
 
 require (
@@ -26,4 +26,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/takuya-go-kit/go-logkit => ../go-logkit
+replace github.com/wahrwelt-kit/go-logkit => ../go-logkit

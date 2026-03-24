@@ -7,9 +7,9 @@ package mock
 import (
 	"context"
 
-	"github.com/takuya-go-kit/go-jwtkit"
 	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
+	"github.com/wahrwelt-kit/go-jwtkit"
 )
 
 // NewMockService creates a new instance of MockService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

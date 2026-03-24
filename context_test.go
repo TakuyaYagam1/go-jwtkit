@@ -6,10 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	logmock "github.com/takuya-go-kit/go-logkit/mock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	logmock "github.com/wahrwelt-kit/go-logkit/mock"
 )
 
 func TestClaimsIntoContext_ClaimsFromContext(t *testing.T) {
