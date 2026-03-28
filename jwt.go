@@ -87,10 +87,11 @@ type JWTService struct {
 // Used for both access and refresh tokens; token_type distinguishes them (TokenTypeAccess / TokenTypeRefresh)
 // Email and full name are not stored in the token; use a /me or user API when the client needs them
 type CustomClaims struct {
+	jwt.RegisteredClaims
+
 	UserID    string `json:"user_id"`        // UUID of the user
 	Role      string `json:"role,omitempty"` // Role for authorization; optional
 	TokenType string `json:"token_type"`     // TokenTypeAccess or TokenTypeRefresh
-	jwt.RegisteredClaims
 }
 
 // TokenPair holds the access and refresh token strings and their Unix expiry timestamps
@@ -109,7 +110,7 @@ type TokenPair struct {
 // Non-empty Audience adds aud claim and validates it on parse
 // AccessTTL and RefreshTTL must be positive and not exceed MaxAccessTTL / MaxRefreshTTL
 // The service copies secret bytes internally; the caller may zero KeyEntry.Secret slices after the call
-func NewJWTService(cfg Config) (*JWTService, error) {
+func NewJWTService(cfg Config) (*JWTService, error) { //nolint:revive,cyclop // constructor validates multiple key entries and config fields
 	if len(cfg.AccessKeys) == 0 {
 		return nil, errors.New("access keys must contain at least one key")
 	}
@@ -219,7 +220,7 @@ func (j *JWTService) GenerateTokenPair(_ context.Context, userID uuid.UUID, role
 	}, nil
 }
 
-func (j *JWTService) rawValidateToken(ctx context.Context, tokenString, tokenType, primaryKid string, keysByKid map[string][]byte, strict bool) (*CustomClaims, error) {
+func (j *JWTService) rawValidateToken(ctx context.Context, tokenString, tokenType, primaryKid string, keysByKid map[string][]byte, strict bool) (*CustomClaims, error) { //nolint:revive // strict is a validation flag required by JWT strict-mode feature
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

@@ -63,7 +63,7 @@ type JWTServiceAsymmetric struct {
 // Key pairs are validated (RSA ≥2048 bits, ECDSA P-256/P-384/P-521, Ed25519); Kid must be non-empty and unique
 // Revoker and UserRoleLookup may be nil; non-empty Audience adds aud claim and validation
 // Key slices are copied but PrivateKey/PublicKey are stored by reference; do not modify key entries after construction
-func NewJWTServiceAsymmetric(cfg AsymmetricConfig) (*JWTServiceAsymmetric, error) {
+func NewJWTServiceAsymmetric(cfg AsymmetricConfig) (*JWTServiceAsymmetric, error) { //nolint:revive,cyclop // constructor validates multiple key types and config fields
 	if len(cfg.AccessKeys) == 0 {
 		return nil, errors.New("access keys must contain at least one key")
 	}
@@ -152,7 +152,7 @@ func NewJWTServiceAsymmetric(cfg AsymmetricConfig) (*JWTServiceAsymmetric, error
 
 const minRSAKeyBits = 2048
 
-func validateAsymmetricKeyPair(priv crypto.PrivateKey, pub crypto.PublicKey) error {
+func validateAsymmetricKeyPair(priv crypto.PrivateKey, pub crypto.PublicKey) error { //nolint:revive,cyclop // key-pair validation dispatches on three key types each requiring multiple checks
 	switch k := priv.(type) {
 	case *rsa.PrivateKey:
 		pubRSA, ok := pub.(*rsa.PublicKey)
@@ -174,8 +174,8 @@ func validateAsymmetricKeyPair(priv crypto.PrivateKey, pub crypto.PublicKey) err
 		if !ok {
 			return errors.New("Ed25519 private key requires Ed25519 public key")
 		}
-		signer := priv.(crypto.Signer)                                //nolint:forcetypeassert
-		if !bytes.Equal(signer.Public().(ed25519.PublicKey), pubEd) { //nolint:forcetypeassert
+		signer := priv.(crypto.Signer)                                //nolint:forcetypeassert,errcheck,revive // ed25519.PrivateKey implements crypto.Signer
+		if !bytes.Equal(signer.Public().(ed25519.PublicKey), pubEd) { //nolint:forcetypeassert,errcheck // ed25519.Signer.Public() always returns ed25519.PublicKey
 			return errors.New("Ed25519 public key does not match private key")
 		}
 		return nil
@@ -258,7 +258,7 @@ func buildValidMethodsFromKeys(keys []AsymmetricKeyEntry) []string {
 	return out
 }
 
-func (j *JWTServiceAsymmetric) rawValidateToken(ctx context.Context, tokenString, tokenType, primaryKid string, publicByKid map[string]crypto.PublicKey, validMethods []string, strict bool) (*CustomClaims, error) {
+func (j *JWTServiceAsymmetric) rawValidateToken(ctx context.Context, tokenString, tokenType, primaryKid string, publicByKid map[string]crypto.PublicKey, validMethods []string, strict bool) (*CustomClaims, error) { //nolint:revive,cyclop // strict is a validation flag required by JWT strict-mode feature; complexity from key-type dispatch
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

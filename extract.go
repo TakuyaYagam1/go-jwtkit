@@ -25,7 +25,7 @@ func ExtractRaw(r *http.Request) string {
 		return ""
 	}
 	rest := strings.TrimLeft(h[6:], " \t")
-	if len(rest) == 0 {
+	if rest == "" {
 		return ""
 	}
 	token := strings.TrimSpace(rest)
