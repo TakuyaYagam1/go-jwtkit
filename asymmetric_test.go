@@ -67,9 +67,9 @@ func TestNewJWTServiceAsymmetric_ECDSA(t *testing.T) {
 		name  string
 		curve elliptic.Curve
 	}{
-		{"P-256", elliptic.P256()},
-		{"P-384", elliptic.P384()},
-		{"P-521", elliptic.P521()},
+		{CurveP256, elliptic.P256()},
+		{CurveP384, elliptic.P384()},
+		{CurveP521, elliptic.P521()},
 	}
 	for _, tc := range curves {
 		t.Run(tc.name, func(t *testing.T) {

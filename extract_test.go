@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const testCookieToken = "token"
+
 func TestExtractRaw(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
@@ -62,12 +64,12 @@ func TestExtractRaw_ShortHeader(t *testing.T) {
 func TestExtractRawFromCookie(t *testing.T) {
 	t.Parallel()
 	r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	assert.Empty(t, ExtractRawFromCookie(r, "token"))
-	r.AddCookie(&http.Cookie{Name: "token", Value: "abc"})
-	assert.Equal(t, "abc", ExtractRawFromCookie(r, "token"))
+	assert.Empty(t, ExtractRawFromCookie(r, testCookieToken))
+	r.AddCookie(&http.Cookie{Name: testCookieToken, Value: "abc"})
+	assert.Equal(t, "abc", ExtractRawFromCookie(r, testCookieToken))
 	r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	r.AddCookie(&http.Cookie{Name: "token", Value: "  x  "})
-	assert.Equal(t, "x", ExtractRawFromCookie(r, "token"))
+	r.AddCookie(&http.Cookie{Name: testCookieToken, Value: "  x  "})
+	assert.Equal(t, "x", ExtractRawFromCookie(r, testCookieToken))
 	r = httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	assert.Empty(t, ExtractRawFromCookie(r, "other"))
 }

@@ -16,6 +16,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// Supported ECDSA curve names per RFC 7518 (JSON Web Algorithms) section 6.2.1.1
+const (
+	CurveP256 = "P-256"
+	CurveP384 = "P-384"
+	CurveP521 = "P-521"
+)
+
 // AsymmetricKeyEntry holds a key id and a key pair for signing (private) and verification (public)
 // Supported: *rsa.PrivateKey (RS256 only; RS384/RS512 not supported), *ecdsa.PrivateKey (ES256/ES384/ES512 by curve), ed25519.PrivateKey (EdDSA)
 // RSA keys must be at least 2048 bits; ECDSA curves P-256, P-384, P-521. PrivateKey and PublicKey must match and pass validation
@@ -191,10 +198,10 @@ func validateAsymmetricKeyPair(priv crypto.PrivateKey, pub crypto.PublicKey) err
 			return errors.New("ECDSA public key does not match private key")
 		}
 		switch k.Curve.Params().Name {
-		case "P-256", "P-384", "P-521":
+		case CurveP256, CurveP384, CurveP521:
 			return nil
 		default:
-			return fmt.Errorf("unsupported ECDSA curve %q (supported: P-256, P-384, P-521)", k.Curve.Params().Name)
+			return fmt.Errorf("unsupported ECDSA curve %q (supported: %s, %s, %s)", k.Curve.Params().Name, CurveP256, CurveP384, CurveP521)
 		}
 	default:
 		return fmt.Errorf("unsupported private key type %T (supported: *rsa.PrivateKey, ed25519.PrivateKey, *ecdsa.PrivateKey)", priv)
